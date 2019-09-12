@@ -1,0 +1,18 @@
+.book-item {
+    width: 260px;
+    border: none !important;
+}
+
+.book-detail-item {
+    width: 260px;
+    border: none !important;
+}
+
+.book-item:hover {
+    opacity: 0.8;
+    cursor: pointer;
+}
+
+img{
+    height: 350px;
+}

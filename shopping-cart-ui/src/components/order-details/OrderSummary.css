@@ -1,0 +1,17 @@
+
+.image-summary {
+    width: 100px;
+    height: auto !important;
+}
+
+.price-text {
+    font-size: x-large;
+}
+
+#spinner {
+    width: 34px;
+    transform: scale(2);
+    font-size: small;
+    color: grey;
+    margin-top: 100px !important;
+}

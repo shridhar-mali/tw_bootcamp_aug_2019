@@ -1,0 +1,91 @@
+stages:
+  - test
+  - build
+  - package
+  - deploystaging
+  - deployprod
+
+variables:
+  REGISTRY_IMAGE: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+
+test:
+  image: node:10
+  cache:
+    paths:
+      - node_modules/
+
+  stage: test
+  script:
+    - echo "Running tests"
+    - yarn install
+    - yarn test -- --coverage
+    - yarn run eslint src
+
+
+build:
+  image: node:10
+  stage: build
+  script:
+    - echo "Building the app"
+    - yarn install
+    - yarn build
+  artifacts:
+    paths:
+      - build
+
+
+docker-build:
+  image: docker:latest
+  services:
+    - docker:dind
+  stage: package
+  script:
+    - docker build -t $REGISTRY_IMAGE .
+    - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN $CI_REGISTRY
+    - docker push $REGISTRY_IMAGE
+
+
+
+k8s-deploy-staging:
+  image: google/cloud-sdk
+  stage: deploystaging
+  script:
+    - set NODE_ENV=staging
+    - echo $NODE_ENV
+    - echo "$GOOGLE_KEY" > key.json
+    - gcloud auth activate-service-account --key-file key.json
+    - gcloud config set compute/zone $CLUSTER_ZONE
+    - gcloud config set project $GCP_PROJECT_NAME
+    - gcloud container clusters get-credentials $CLUSTER_NAME
+    - kubectl create namespace qa 2>/dev/null || echo "namespace qa already exist"
+    - kubectl config set-context --current --namespace=qa
+    - kubectl delete secret shopping-cart-ui-registry 2>/dev/null || echo "secret does not exist"
+    - kubectl create secret docker-registry shopping-cart-ui-registry --docker-server=https://registry.gitlab.com --docker-username=$REGISTRY_TOKEN --docker-password=$REGISTRY_PASSWD
+    - kubectl apply -f deployment.yml
+    - kubectl set image deployment/shopping-cart-ui shopping-cart-ui=$REGISTRY_IMAGE
+
+  environment:
+    name: staging
+    url: http://staging/
+
+k8s-deploy-prod:
+  image: google/cloud-sdk
+  stage: deployprod
+  script:
+    - set NODE_ENV=production
+    - echo $NODE_ENV
+    - echo "$GOOGLE_KEY" > key.json
+    - gcloud auth activate-service-account --key-file key.json
+    - gcloud config set compute/zone $CLUSTER_ZONE
+    - gcloud config set project $GCP_PROJECT_NAME
+    - gcloud container clusters get-credentials $CLUSTER_NAME
+    - kubectl create namespace prod 2>/dev/null || echo "namespace prod already exist"
+    - kubectl config set-context --current --namespace=prod
+    - kubectl delete secret shopping-cart-ui-registry 2>/dev/null || echo "secret does not exist"
+    - kubectl create secret docker-registry shopping-cart-ui-registry --docker-server=https://registry.gitlab.com --docker-username=$REGISTRY_TOKEN --docker-password=$REGISTRY_PASSWD
+    - kubectl apply -f deployment.yml
+    - kubectl set image deployment/shopping-cart-ui shopping-cart-ui=$REGISTRY_IMAGE
+  when: manual
+  environment:
+    name: production
+    url: http://production/
